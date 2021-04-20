@@ -1,0 +1,12 @@
+[package]
+name = "scriptio-virtual-machine"
+version = "0.1.0"
+authors = ["Anton Kolomeytsev <antonkolomeytsev@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+utf8-chars = "1.0.0"
+
+[dto]
+name="dto"
+path="src/dto.rs"

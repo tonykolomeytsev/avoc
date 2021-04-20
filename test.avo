@@ -1,0 +1,3 @@
+a = random()
+if a == 10
+    println(a)
