@@ -42,6 +42,9 @@ enum Expected {
     Newline,
 }
 
+#[derive(Debug)]
+pub struct SyntaxError { pub pos: usize, pub message: String }
+
 impl TokenReader {
 
     /// Creates an new `TokenReader` from source code string.
@@ -86,7 +89,7 @@ impl TokenReader {
     /// 
     /// ```
     /// let token_reader = TokenReader::new("2 + 2".to_string());
-    /// let tokens = token_reader.parse();
+    /// let tokens = token_reader.parse().unwrap();
     /// 
     /// assert_eq!(
     ///     vec![
@@ -97,7 +100,7 @@ impl TokenReader {
     ///     tokens,
     /// );
     /// ```
-    pub fn parse(&self) -> Vec<Token> {
+    pub fn parse(&self) -> Result<Vec<Token>, SyntaxError> {
         let mut iter = self.source.chars();
         let mut offset = 0usize;
         let mut tokens: Vec<Token> = vec!();
@@ -109,13 +112,18 @@ impl TokenReader {
             }
             push_token_if_ready(&self.state, &self.source, offset, &mut tokens);
             match new_char {
-                Some(val) => self.state.set(reduce_state(val, offset - 1, self.state.get())),
+                Some(val) => {
+                    match reduce_state(val, offset - 1, self.state.get()) {
+                        Ok(new_state) => self.state.set(new_state),
+                        Err(e) => return Err(e), 
+                    }
+                },
                 None => break,
             };
         }
         self.state.set(State { is_ready_to_push: true, ..self.state.get() });
         push_token_if_ready(&self.state, &self.source, offset, &mut tokens);
-        tokens
+        Ok(tokens)
     }
 }
 
@@ -157,7 +165,7 @@ fn get_keyword_or_identifier(token_content: String, start: usize) -> Token {
 }
 
 #[inline]
-fn reduce_state(symbol: char, offset: usize, state: State) -> State {
+fn reduce_state(symbol: char, offset: usize, state: State) -> Result<State, SyntaxError> {
     match state.expected {
         Expected::Nothing => reduce_state_nothing(symbol, offset, state),
         Expected::IntNumber => reduce_state_int_number(symbol, state),
@@ -171,51 +179,54 @@ fn reduce_state(symbol: char, offset: usize, state: State) -> State {
 }
 
 #[inline]
-fn reduce_state_nothing(symbol: char, offset: usize, state: State) -> State {
+fn reduce_state_nothing(symbol: char, offset: usize, state: State) -> Result<State, SyntaxError> {
     match symbol {
-        val if val.is_digit(10) => State { expected: Expected::IntNumber, start_offset: offset, ..state },
-        val if val.is_alphabetic() => State { expected: Expected::Identifier, start_offset: offset, ..state },
-        '\n' => State { expected: Expected::Newline, start_offset: offset, ..state },
+        val if val.is_digit(10) => Ok(State { expected: Expected::IntNumber, start_offset: offset, ..state }),
+        val if val.is_alphabetic() => Ok(State { expected: Expected::Identifier, start_offset: offset, ..state }),
+        '\n' => Ok(State { expected: Expected::Newline, start_offset: offset, ..state }),
         val if val.is_whitespace() => match state.is_start_of_line {
-            true => State { expected: Expected::Indent, start_offset: offset, ..state },
-            false => State { start_offset: offset, ..state },
+            true => Ok(State { expected: Expected::Indent, start_offset: offset, ..state }),
+            false => Ok(State { start_offset: offset, ..state }),
         },
         val if OPERATORS.chars().any(|s| s == val) =>
-            State { expected: Expected::Operator, start_offset: offset, ..state },
-        '"' => State { expected: Expected::StringConstant, is_inside_string: true, start_offset: offset, ..state },
-        _ => panic!("Unexpected symbol {:?} at offset {}", symbol, offset),
+            Ok(State { expected: Expected::Operator, start_offset: offset, ..state }),
+        '"' => Ok(State { expected: Expected::StringConstant, is_inside_string: true, start_offset: offset, ..state }),
+        _ => Err(SyntaxError { pos: offset, message: format!("Unexpected symbol {:?}", symbol) }),
     }
 }
 
 #[inline]
-fn reduce_state_int_number(symbol: char, state: State) -> State {
-    match symbol {
+fn reduce_state_int_number(symbol: char, state: State) -> Result<State, SyntaxError> {
+    let new_state = match symbol {
         val if val.is_digit(10) => state,
         '.' => State { expected: Expected::FloatNumber, ..state },
         _ => State { is_ready_to_push: true, ..state },
-    }
+    };
+    Ok(new_state)
 }
 
 #[inline]
-fn reduce_state_float_number(symbol: char, state: State) -> State {
-    match symbol {
+fn reduce_state_float_number(symbol: char, state: State) -> Result<State, SyntaxError> {
+    let new_state = match symbol {
         val if val.is_digit(10) => state,
         _ => State { is_ready_to_push: true, ..state },
-    }
+    };
+    Ok(new_state)
 }
 
 #[inline]
-fn reduce_state_identifier(symbol: char, state: State) -> State {
-    match symbol {
+fn reduce_state_identifier(symbol: char, state: State) -> Result<State, SyntaxError> {
+    let new_state = match symbol {
         val if val.is_alphanumeric() => state,
         '_' => state,
         _ => State { is_ready_to_push: true, ..state },
-    }
+    };
+    Ok(new_state)
 }
 
 #[inline]
-fn reduce_state_operator(symbol: char, state: State) -> State {
-    match state.prev_operator_char {
+fn reduce_state_operator(symbol: char, state: State) -> Result<State, SyntaxError> {
+    let new_state = match state.prev_operator_char {
         None => match symbol {
             val if SINGLE_CHAR_OPERATORS.chars().any(|s| s == val) => 
                 State { is_ready_to_push: true, prev_operator_char: None, ..state },
@@ -225,28 +236,31 @@ fn reduce_state_operator(symbol: char, state: State) -> State {
                 State { is_ready_to_push: true, prev_operator_char: None, ..state },
         },
         Some(_) => State { is_ready_to_push: true, prev_operator_char: None, ..state }
-    }
+    };
+    Ok(new_state)
 }
 
 #[inline]
-fn reduce_state_whitespace(symbol: char, state: State) -> State {
-    match symbol {
+fn reduce_state_whitespace(symbol: char, state: State) -> Result<State, SyntaxError> {
+    let new_state = match symbol {
         val if val.is_whitespace() => state,
         _ => State { is_ready_to_push: true, ..state },
-    }
+    };
+    Ok(new_state)
 }
 
 #[inline]
-fn reduce_state_newline(symbol: char, state: State) -> State {
-    match symbol {
+fn reduce_state_newline(symbol: char, state: State) -> Result<State, SyntaxError> {
+    let new_state = match symbol {
         '\n' => state,
         _ => State { is_ready_to_push: true, ..state },
-    }
+    };
+    Ok(new_state)
 }
 
 #[inline]
-fn reduce_state_string_constant(symbol: char, state: State) -> State {
-    match state.is_prev_escape_symbol {
+fn reduce_state_string_constant(symbol: char, state: State) -> Result<State, SyntaxError> {
+    let new_state = match state.is_prev_escape_symbol {
         false => match symbol {
             '"' => State { is_inside_string: false, ..state },
             '\\' => State { is_prev_escape_symbol: true, ..state },
@@ -256,5 +270,6 @@ fn reduce_state_string_constant(symbol: char, state: State) -> State {
             },
         },
         true => State { is_prev_escape_symbol: false, ..state },
-    }
+    };
+    Ok(new_state)
 }

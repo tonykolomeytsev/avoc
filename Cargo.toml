@@ -1,5 +1,5 @@
 [package]
-name = "scriptio-virtual-machine"
+name = "avoc"
 version = "0.1.0"
 authors = ["Anton Kolomeytsev <antonkolomeytsev@gmail.com>"]
 edition = "2018"
