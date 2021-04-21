@@ -1,4 +1,4 @@
-use crate::dto::token::Token;
+use crate::dto::Token;
 use std::cell::Cell;
 
 const OPERATORS: &'static &str = &"=+-*/\\().,<>";

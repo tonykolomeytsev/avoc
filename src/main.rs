@@ -1,10 +1,11 @@
 
 mod dto;
-mod tokenreader;
+mod parser;
 
 use std::io::prelude::*;
 use std::fs::File;
-use tokenreader::{ TokenReader };
+use parser::TokenReader;
+use parser::TreeBuilder;
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
