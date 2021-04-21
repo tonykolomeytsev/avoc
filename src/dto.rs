@@ -3,7 +3,7 @@
 pub struct Token {
     pub token_type: TokenType,
     pub payload: String,
-    pub pos_start: usize,
+    pub pos: usize,
 }
 
 #[derive(Debug)]

@@ -9,6 +9,11 @@ const KEYWORDS: &'static [&'static str] = &[
     "while",
 ];
 
+/// Simple `String` to `Vec<Token>` converter.
+/// 
+/// The `TokenReader` reads all chars from string and creates an list of tokens after calling the [`parse`] method.
+/// 
+/// [`parse`]: TokenReader::parse
 pub struct TokenReader {
     source: String,
     state: Cell<State>,
@@ -36,9 +41,21 @@ enum Expected {
 
 impl TokenReader {
 
+    /// Creates an new `TokenReader` from source code string.
+    /// 
+    /// To get tokens from source use the `parse` method.
+    /// 
+    /// # Examples
+    /// 
+    /// Basic usage:
+    /// 
+    /// ```
+    /// let source_code = get_source_code();
+    /// let token_reader = TokenReader::new(source_code);
+    /// ```
     pub fn new(source: String) -> TokenReader {
         TokenReader {
-            source: source + "\n",
+            source: source,
             state: Cell::from(State {
                 start_offset: 0,
                 expected: Expected::Nothing,
@@ -49,6 +66,32 @@ impl TokenReader {
         }
     }
 
+    /// Creates an `Vec<Token>` from source string.
+    /// 
+    /// This is an expensive operation, please cache the results of its work.
+    /// 
+    /// Also you may check [`Token`] and [`TokenType`].
+    /// 
+    /// [`Token`]: crate::dto::Token
+    /// [`TokenType`]: crate::dto::Token
+    /// 
+    /// # Examples
+    /// 
+    /// Basic usage:
+    /// 
+    /// ```
+    /// let token_reader = TokenReader::new("2 + 2".to_string());
+    /// let tokens = token_reader.parse();
+    /// 
+    /// assert_eq!(
+    ///     vec![
+    ///         Token { token_type: TokenType::Number, payload: "2", pos: 0 },
+    ///         Token { token_type: TokenType::Operator, payload: "+", pos: 1 },
+    ///         Token { token_type: TokenType::Number, payload: "2", pos: 2 },
+    ///     ],
+    ///     tokens,
+    /// );
+    /// ```
     pub fn parse(&self) -> Vec<Token> {
         let mut iter = self.source.chars();
         let mut offset = 0usize;
@@ -78,12 +121,12 @@ fn push_token_if_ready(state_cell: &Cell<State>, source: &String, offset: usize,
         let end = offset - 1;
         let token_content = String::from(&source[start..end]);
         match state.expected {
-            Expected::IntNumber => tokens.push(Token { token_type: TokenType::IntConstant, payload: token_content, pos_start: start }),
-            Expected::FloatNumber => tokens.push(Token { token_type: TokenType::FloatConstant, payload: token_content, pos_start: start }),
+            Expected::IntNumber => tokens.push(Token { token_type: TokenType::IntConstant, payload: token_content, pos: start }),
+            Expected::FloatNumber => tokens.push(Token { token_type: TokenType::FloatConstant, payload: token_content, pos: start }),
             Expected::Identifier => tokens.push(get_keyword_or_identifier(token_content, start)),
-            Expected::Operator => tokens.push(Token { token_type: TokenType::Operator, payload: token_content, pos_start: start }),
-            Expected::Newline => tokens.push(Token { token_type: TokenType::NewLine, payload: token_content, pos_start: start }),
-            Expected::Indent => tokens.push(Token { token_type: TokenType::Indent { depth: end - start }, payload: token_content, pos_start: start }),
+            Expected::Operator => tokens.push(Token { token_type: TokenType::Operator, payload: token_content, pos: start }),
+            Expected::Newline => tokens.push(Token { token_type: TokenType::NewLine, payload: token_content, pos: start }),
+            Expected::Indent => tokens.push(Token { token_type: TokenType::Indent { depth: end - start }, payload: token_content, pos: start }),
             Expected::Nothing => {},
         };
         state_cell.set(State { 
@@ -98,8 +141,8 @@ fn push_token_if_ready(state_cell: &Cell<State>, source: &String, offset: usize,
 
 fn get_keyword_or_identifier(token_content: String, start: usize) -> Token {
     match token_content {
-        val if KEYWORDS.iter().any(|k| k.to_string() == val) => Token { token_type: TokenType::Operator, payload: val, pos_start: start },
-        _ => Token { token_type: TokenType::Identifier, payload: token_content, pos_start: start }
+        val if KEYWORDS.iter().any(|k| k.to_string() == val) => Token { token_type: TokenType::Operator, payload: val, pos: start },
+        _ => Token { token_type: TokenType::Identifier, payload: token_content, pos: start }
     }
 }
 
