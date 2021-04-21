@@ -31,7 +31,9 @@ fn print_debug_info(source: &String, offset: usize, message: String) {
             let column = offset - sum;
             println!("Error at line {} column {}:", line_num, column);
             println!("{}", line);
+            print!("\u{001b}[31m\u{001b}[1m");
             println!("{:width$}^ {}", "", message, width=column);
+            print!("\u{001b}[0m");
             return
         }
         sum += len + 1;

@@ -1,4 +1,4 @@
-use crate::dto::{ Token, TokenType };
+use crate::dto::token::Token;
 use std::cell::Cell;
 
 const OPERATORS: &'static &str = &"=+-*/\\().,<>";
@@ -132,16 +132,16 @@ fn push_token_if_ready(state_cell: &Cell<State>, source: &String, offset: usize,
         let end = offset - 1;
         let token_content = String::from(&source[start..end]);
         match state.expected {
-            Expected::IntNumber => tokens.push(Token { token_type: TokenType::IntConstant, payload: token_content, pos: start }),
-            Expected::FloatNumber => tokens.push(Token { token_type: TokenType::FloatConstant, payload: token_content, pos: start }),
+            Expected::IntNumber => tokens.push(Token::IntConstant { value: token_content.parse().unwrap(), pos: offset }),
+            Expected::FloatNumber => tokens.push(Token::FloatConstant { value: token_content.parse().unwrap(), pos: offset }),
             Expected::StringConstant => {
                 let token_content = String::from(&source[(start + 1)..(end - 1)]);
-                tokens.push(Token { token_type: TokenType::StringConstant, payload: token_content, pos: start })
+                tokens.push(Token::StringConstant { value: token_content, pos: start })
             },
             Expected::Identifier => tokens.push(get_keyword_or_identifier(token_content, start)),
-            Expected::Operator => tokens.push(Token { token_type: TokenType::Operator, payload: token_content, pos: start }),
-            Expected::Newline => tokens.push(Token { token_type: TokenType::NewLine, payload: token_content, pos: start }),
-            Expected::Indent => tokens.push(Token { token_type: TokenType::Indent { depth: end - start }, payload: token_content, pos: start }),
+            Expected::Operator => tokens.push(Token::Operator { payload: token_content, pos: start }),
+            Expected::Newline => tokens.push(Token::NewLine { pos: offset }),
+            Expected::Indent => tokens.push(Token::Indent { depth: end - start, pos: offset }),
             Expected::Nothing => { /* no-op */ },
         };
         state_cell.set(State { 
@@ -157,8 +157,8 @@ fn push_token_if_ready(state_cell: &Cell<State>, source: &String, offset: usize,
 #[inline]
 fn get_keyword_or_identifier(token_content: String, start: usize) -> Token {
     match token_content {
-        val if KEYWORDS.iter().any(|k| k.to_string() == val) => Token { token_type: TokenType::Operator, payload: val, pos: start },
-        _ => Token { token_type: TokenType::Identifier, payload: token_content, pos: start }
+        val if KEYWORDS.iter().any(|k| k.to_string() == val) => Token::Operator { payload: val, pos: start },
+        _ => Token::Identifier { name: token_content, pos: start }
     }
 }
 
@@ -166,8 +166,8 @@ fn get_keyword_or_identifier(token_content: String, start: usize) -> Token {
 fn reduce_state(symbol: char, offset: usize, state: State) -> Result<State, SyntaxError> {
     match state.expected {
         Expected::Nothing => reduce_state_nothing(symbol, offset, state),
-        Expected::IntNumber => reduce_state_int_number(symbol, state),
-        Expected::FloatNumber => reduce_state_float_number(symbol, state),
+        Expected::IntNumber => reduce_state_int_number(symbol, offset, state),
+        Expected::FloatNumber => reduce_state_float_number(symbol, offset, state),
         Expected::StringConstant => reduce_state_string_constant(symbol, state),
         Expected::Identifier => reduce_state_identifier(symbol, state),
         Expected::Operator => reduce_state_operator(symbol, state),
@@ -194,22 +194,22 @@ fn reduce_state_nothing(symbol: char, offset: usize, state: State) -> Result<Sta
 }
 
 #[inline]
-fn reduce_state_int_number(symbol: char, state: State) -> Result<State, SyntaxError> {
-    let new_state = match symbol {
-        val if val.is_digit(10) => state,
-        '.' => State { expected: Expected::FloatNumber, ..state },
-        _ => State { is_ready_to_push: true, ..state },
-    };
-    Ok(new_state)
+fn reduce_state_int_number(symbol: char, offset: usize, state: State) -> Result<State, SyntaxError> {
+    match symbol {
+        val if val.is_digit(10) => Ok(state),
+        val if val.is_alphabetic() => Err(SyntaxError { pos: offset, message: format!("Invalid character in integer number record: {:?}", symbol) }),
+        '.' => Ok(State { expected: Expected::FloatNumber, ..state }),
+        _ => Ok(State { is_ready_to_push: true, ..state }),
+    }
 }
 
 #[inline]
-fn reduce_state_float_number(symbol: char, state: State) -> Result<State, SyntaxError> {
-    let new_state = match symbol {
-        val if val.is_digit(10) => state,
-        _ => State { is_ready_to_push: true, ..state },
-    };
-    Ok(new_state)
+fn reduce_state_float_number(symbol: char, offset: usize, state: State) -> Result<State, SyntaxError> {
+    match symbol {
+        val if val.is_digit(10) => Ok(state),
+        val if val.is_alphabetic() => Err(SyntaxError { pos: offset, message: format!("Invalid character in floating point number record: {:?}", symbol) }),
+        _ => Ok(State { is_ready_to_push: true, ..state }),
+    }
 }
 
 #[inline]
