@@ -8,11 +8,10 @@ use tokenreader::{ TokenReader };
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
-    let content = read_source_file(&args[1]);
-    let token_reader = TokenReader::new(content);
-    match token_reader.parse() {
+    let source = read_source_file(&args[1]);
+    match TokenReader::new().parse(&source) {
         Ok(tokens) => tokens.iter().for_each(|it| println!("{:?}", it)),
-        Err(e) => print_debug_info(&args[1], e.pos, e.message),
+        Err(e) => print_debug_info(&source, e.pos, e.message),
     };
 }
 
@@ -23,15 +22,14 @@ fn read_source_file(file_name: &String) -> String {
     source_content
 }
 
-fn print_debug_info(file_name: &String, offset: usize, message: String) {
-    let file_content = read_source_file(file_name);
+fn print_debug_info(source: &String, offset: usize, message: String) {
     let mut line_num = 1;
     let mut sum = 0usize;
-    for line in file_content.lines() {
+    for line in source.lines() {
         let len = line.len();
         if sum + len >= offset {
             let column = offset - sum;
-            println!("Syntax error at line {} column {}:", line_num, column);
+            println!("Error at line {} column {}:", line_num, column);
             println!("{}", line);
             println!("{:width$}^ {}", "", message, width=column);
             return

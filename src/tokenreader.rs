@@ -15,7 +15,6 @@ const KEYWORDS: &'static [&'static str] = &[
 /// 
 /// [`parse`]: TokenReader::parse
 pub struct TokenReader {
-    source: String,
     state: Cell<State>,
 }
 
@@ -57,11 +56,10 @@ impl TokenReader {
     /// 
     /// ```
     /// let source_code = get_source_code();
-    /// let token_reader = TokenReader::new(source_code);
+    /// let token_reader = TokenReader::new();
     /// ```
-    pub fn new(source: String) -> TokenReader {
+    pub fn new() -> TokenReader {
         TokenReader {
-            source: source,
             state: Cell::from(State {
                 start_offset: 0,
                 expected: Expected::Nothing,
@@ -88,8 +86,8 @@ impl TokenReader {
     /// Basic usage:
     /// 
     /// ```
-    /// let token_reader = TokenReader::new("2 + 2".to_string());
-    /// let tokens = token_reader.parse().unwrap();
+    /// let token_reader = TokenReader::new();
+    /// let tokens = token_reader.parse(String::from("2 + 2")).unwrap();
     /// 
     /// assert_eq!(
     ///     vec![
@@ -100,8 +98,8 @@ impl TokenReader {
     ///     tokens,
     /// );
     /// ```
-    pub fn parse(&self) -> Result<Vec<Token>, SyntaxError> {
-        let mut iter = self.source.chars();
+    pub fn parse(&self, source: &String) -> Result<Vec<Token>, SyntaxError> {
+        let mut iter = source.chars();
         let mut offset = 0usize;
         let mut tokens: Vec<Token> = vec!();
         let mut new_char = None;
@@ -110,7 +108,7 @@ impl TokenReader {
                 new_char = iter.next();
                 offset += 1;
             }
-            push_token_if_ready(&self.state, &self.source, offset, &mut tokens);
+            push_token_if_ready(&self.state, source, offset, &mut tokens);
             match new_char {
                 Some(val) => {
                     match reduce_state(val, offset - 1, self.state.get()) {
@@ -122,7 +120,7 @@ impl TokenReader {
             };
         }
         self.state.set(State { is_ready_to_push: true, ..self.state.get() });
-        push_token_if_ready(&self.state, &self.source, offset, &mut tokens);
+        push_token_if_ready(&self.state, source, offset, &mut tokens);
         Ok(tokens)
     }
 }
