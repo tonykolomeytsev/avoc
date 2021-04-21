@@ -26,6 +26,8 @@ struct State {
     is_ready_to_push: bool,
     is_start_of_line: bool,
     prev_operator_char: Option<char>,
+    is_inside_string: bool,
+    is_prev_escape_symbol: bool,
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -33,6 +35,7 @@ enum Expected {
     Nothing,
     IntNumber,
     FloatNumber,
+    StringConstant,
     Identifier,
     Operator,
     Indent,
@@ -62,6 +65,8 @@ impl TokenReader {
                 is_ready_to_push: false,
                 is_start_of_line: false,
                 prev_operator_char: None,
+                is_inside_string: false,
+                is_prev_escape_symbol: false,
             })
         }
     }
@@ -123,11 +128,15 @@ fn push_token_if_ready(state_cell: &Cell<State>, source: &String, offset: usize,
         match state.expected {
             Expected::IntNumber => tokens.push(Token { token_type: TokenType::IntConstant, payload: token_content, pos: start }),
             Expected::FloatNumber => tokens.push(Token { token_type: TokenType::FloatConstant, payload: token_content, pos: start }),
+            Expected::StringConstant => {
+                let token_content = String::from(&source[(start + 1)..(end - 1)]);
+                tokens.push(Token { token_type: TokenType::StringConstant, payload: token_content, pos: start })
+            },
             Expected::Identifier => tokens.push(get_keyword_or_identifier(token_content, start)),
             Expected::Operator => tokens.push(Token { token_type: TokenType::Operator, payload: token_content, pos: start }),
             Expected::Newline => tokens.push(Token { token_type: TokenType::NewLine, payload: token_content, pos: start }),
             Expected::Indent => tokens.push(Token { token_type: TokenType::Indent { depth: end - start }, payload: token_content, pos: start }),
-            Expected::Nothing => {},
+            Expected::Nothing => { /* no-op */ },
         };
         state_cell.set(State { 
             is_ready_to_push: false, 
@@ -153,6 +162,7 @@ fn reduce_state(symbol: char, offset: usize, state: State) -> State {
         Expected::Nothing => reduce_state_nothing(symbol, offset, state),
         Expected::IntNumber => reduce_state_int_number(symbol, state),
         Expected::FloatNumber => reduce_state_float_number(symbol, state),
+        Expected::StringConstant => reduce_state_string_constant(symbol, state),
         Expected::Identifier => reduce_state_identifier(symbol, state),
         Expected::Operator => reduce_state_operator(symbol, state),
         Expected::Indent => reduce_state_whitespace(symbol, state),
@@ -172,6 +182,7 @@ fn reduce_state_nothing(symbol: char, offset: usize, state: State) -> State {
         },
         val if OPERATORS.chars().any(|s| s == val) =>
             State { expected: Expected::Operator, start_offset: offset, ..state },
+        '"' => State { expected: Expected::StringConstant, is_inside_string: true, start_offset: offset, ..state },
         _ => panic!("Unexpected symbol {:?} at offset {}", symbol, offset),
     }
 }
@@ -230,5 +241,20 @@ fn reduce_state_newline(symbol: char, state: State) -> State {
     match symbol {
         '\n' => state,
         _ => State { is_ready_to_push: true, ..state },
+    }
+}
+
+#[inline]
+fn reduce_state_string_constant(symbol: char, state: State) -> State {
+    match state.is_prev_escape_symbol {
+        false => match symbol {
+            '"' => State { is_inside_string: false, ..state },
+            '\\' => State { is_prev_escape_symbol: true, ..state },
+            _ => match state.is_inside_string {
+                true => state,
+                false => State { is_ready_to_push: true, ..state },
+            },
+        },
+        true => State { is_prev_escape_symbol: false, ..state },
     }
 }

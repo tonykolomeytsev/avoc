@@ -12,6 +12,7 @@ pub enum TokenType {
     Identifier,
     IntConstant,
     FloatConstant,
+    StringConstant,
     NewLine,
     Indent { depth: usize },
 }

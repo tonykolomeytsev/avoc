@@ -1,3 +1,5 @@
 a = random()
 if a == 10
-    println(a)
+    println("Hello world: " + a)
+    emptyString = ""
+    stringWithQuotes = "quote \" and the second \""
