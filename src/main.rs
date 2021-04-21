@@ -11,7 +11,7 @@ fn main() {
     let content = read_source_file(&args[1]);
     let token_reader = TokenReader::new(content);
     let tokens = token_reader.parse();
-    println!("{:?}", tokens);
+    tokens.iter().for_each(|it| println!("{:?}", it))
 }
 
 fn read_source_file(file_name: &String) -> String {

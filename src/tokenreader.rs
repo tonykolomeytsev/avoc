@@ -102,7 +102,7 @@ impl TokenReader {
                 new_char = iter.next();
                 offset += 1;
             }
-            push_token_if_ready(&self.state, &self.source, offset, &mut tokens);    
+            push_token_if_ready(&self.state, &self.source, offset, &mut tokens);
             match new_char {
                 Some(val) => self.state.set(reduce_state(val, offset - 1, self.state.get())),
                 None => break,
@@ -131,14 +131,15 @@ fn push_token_if_ready(state_cell: &Cell<State>, source: &String, offset: usize,
         };
         state_cell.set(State { 
             is_ready_to_push: false, 
-            expected: Expected::Nothing, 
-            is_start_of_line: false, 
+            expected: Expected::Nothing,
+            is_start_of_line: match state.expected { Expected::Newline => true, _ => false }, 
             prev_operator_char: None, 
             ..state
         });
     }
 }
 
+#[inline]
 fn get_keyword_or_identifier(token_content: String, start: usize) -> Token {
     match token_content {
         val if KEYWORDS.iter().any(|k| k.to_string() == val) => Token { token_type: TokenType::Operator, payload: val, pos: start },
@@ -146,6 +147,7 @@ fn get_keyword_or_identifier(token_content: String, start: usize) -> Token {
     }
 }
 
+#[inline]
 fn reduce_state(symbol: char, offset: usize, state: State) -> State {
     match state.expected {
         Expected::Nothing => reduce_state_nothing(symbol, offset, state),
@@ -154,25 +156,27 @@ fn reduce_state(symbol: char, offset: usize, state: State) -> State {
         Expected::Identifier => reduce_state_identifier(symbol, state),
         Expected::Operator => reduce_state_operator(symbol, state),
         Expected::Indent => reduce_state_whitespace(symbol, state),
-        _ => panic!("Unexpected symbol {:?} at offset {}", symbol, offset)
+        Expected::Newline => reduce_state_newline(symbol, state),
     }
 }
 
+#[inline]
 fn reduce_state_nothing(symbol: char, offset: usize, state: State) -> State {
     match symbol {
         val if val.is_digit(10) => State { expected: Expected::IntNumber, start_offset: offset, ..state },
         val if val.is_alphabetic() => State { expected: Expected::Identifier, start_offset: offset, ..state },
+        '\n' => State { expected: Expected::Newline, start_offset: offset, ..state },
         val if val.is_whitespace() => match state.is_start_of_line {
             true => State { expected: Expected::Indent, start_offset: offset, ..state },
             false => State { start_offset: offset, ..state },
         },
         val if OPERATORS.chars().any(|s| s == val) =>
             State { expected: Expected::Operator, start_offset: offset, ..state },
-        '\n' => State { expected: Expected::Newline, start_offset: offset, is_ready_to_push: true, ..state },
         _ => panic!("Unexpected symbol {:?} at offset {}", symbol, offset),
     }
 }
 
+#[inline]
 fn reduce_state_int_number(symbol: char, state: State) -> State {
     match symbol {
         val if val.is_digit(10) => state,
@@ -181,6 +185,7 @@ fn reduce_state_int_number(symbol: char, state: State) -> State {
     }
 }
 
+#[inline]
 fn reduce_state_float_number(symbol: char, state: State) -> State {
     match symbol {
         val if val.is_digit(10) => state,
@@ -188,6 +193,7 @@ fn reduce_state_float_number(symbol: char, state: State) -> State {
     }
 }
 
+#[inline]
 fn reduce_state_identifier(symbol: char, state: State) -> State {
     match symbol {
         val if val.is_alphanumeric() => state,
@@ -196,6 +202,7 @@ fn reduce_state_identifier(symbol: char, state: State) -> State {
     }
 }
 
+#[inline]
 fn reduce_state_operator(symbol: char, state: State) -> State {
     match state.prev_operator_char {
         None => match symbol {
@@ -210,6 +217,7 @@ fn reduce_state_operator(symbol: char, state: State) -> State {
     }
 }
 
+#[inline]
 fn reduce_state_whitespace(symbol: char, state: State) -> State {
     match symbol {
         val if val.is_whitespace() => state,
@@ -217,3 +225,10 @@ fn reduce_state_whitespace(symbol: char, state: State) -> State {
     }
 }
 
+#[inline]
+fn reduce_state_newline(symbol: char, state: State) -> State {
+    match symbol {
+        '\n' => state,
+        _ => State { is_ready_to_push: true, ..state },
+    }
+}
