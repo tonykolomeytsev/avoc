@@ -434,7 +434,13 @@ fn test_arithmetical_operators() {
     assert_eq!(expected, actual)
 }
 
-/// Testing the correct finding of arithmetical operators
+/// Testing the correct finding of logical (bool) and bit (int) operators
+/// 
+/// # Operators
+/// - `and`
+/// - `or`
+/// - `xor`
+/// - `not`
 #[test]
 fn test_logical_operators() {
     let source = String::from("(A and B) or not (C and not D)");
