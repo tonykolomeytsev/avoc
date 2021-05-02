@@ -1,4 +1,5 @@
 a = random()
+k = 10%%
 if a == 10.0
     println("Hello world: " + a)
     emptyString = ""

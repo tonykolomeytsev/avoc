@@ -27,6 +27,6 @@ impl TreeBuilder {
     }
 
     fn parse(&self, tokens: &Vec<Token>) -> Node {
-        Node::SingleToken(Token::NewLine { pos: 0 })
+        Node::SingleToken(Token::Identifier { name: String::from("kek"), pos: 0 })
     }
 }

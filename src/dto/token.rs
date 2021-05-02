@@ -1,5 +1,5 @@
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Token {
     Operator { payload: String, pos: usize },
     Identifier { name: String, pos: usize },
@@ -7,5 +7,4 @@ pub enum Token {
     FloatConstant { value: f32, pos: usize },
     StringConstant { value: String, pos: usize },
     NewLine { pos: usize },
-    Indent { depth: usize, pos: usize },
 }
