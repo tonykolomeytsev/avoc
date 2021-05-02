@@ -10,6 +10,10 @@ const KEYWORDS: &'static [&'static str] = &[
     "in",
     "match",
     "mut",
+    "and",
+    "or",
+    "xor",
+    "not",
 ];
 
 /// Simple `String` to `Vec<Token>` converter.
@@ -112,7 +116,6 @@ impl TokenReader {
         let mut prev_char = '\n';
         let mut it = 0;
         loop {
-            println!("loop: {:?}", current_char);
             if !self.state.get().is_ready_to_push {
                 prev_char = match current_char {
                     Some(val) => val,
@@ -186,7 +189,6 @@ fn get_keyword_or_identifier(token_content: String, start: usize) -> Token {
 
 #[inline]
 fn reduce_state(symbol: char, prev_symbol: char, offset: usize, state: State) -> Result<State, SyntaxError> {
-    println!("Reduce state: {}", symbol);
     match state.expected {
         Expected::Nothing => reduce_state_nothing(symbol, offset, state),
         Expected::IntNumber => reduce_state_int_number(symbol, offset, state),
@@ -200,7 +202,7 @@ fn reduce_state(symbol: char, prev_symbol: char, offset: usize, state: State) ->
 
 #[inline]
 fn reduce_state_nothing(symbol: char, offset: usize, state: State) -> Result<State, SyntaxError> {
-    let s = match symbol {
+    match symbol {
         val if val.is_digit(10) => Ok(State { expected: Expected::IntNumber, start_offset: offset, ..state }),
         val if val.is_alphabetic() => Ok(State { expected: Expected::Identifier, start_offset: offset, ..state }),
         '\n' => Ok(State { expected: Expected::Newline, start_offset: offset, ..state }),
@@ -210,9 +212,7 @@ fn reduce_state_nothing(symbol: char, offset: usize, state: State) -> Result<Sta
         '"' => Ok(State { expected: Expected::StringConstant, is_inside_string: true, start_offset: offset, ..state }),
         '_' => Err(SyntaxError { pos: offset, message: String::from("Identifier names must not start with an underscore") }),
         _ => Err(SyntaxError { pos: offset, message: format!("Unexpected symbol {:?}", symbol) }),
-    };
-    println!("Reduce nothing: {} -> {:?}", symbol, s);
-    s
+    }
 }
 
 #[inline]
@@ -254,10 +254,7 @@ fn reduce_state_operator(symbol: char, prev_symbol: char, state: State) -> Resul
     let new_state = match prev_symbol {
         '+' | '-' | '*' | '/' | '=' | '!' | '<' | '>' => match symbol {
             '=' => state,
-            _ => {
-                println!("kek");
-                State { is_ready_to_push: true, ..state }
-            },
+            _ => State { is_ready_to_push: true, ..state },
         },
         _ => State { is_ready_to_push: true, ..state },
     };
@@ -432,6 +429,29 @@ fn test_arithmetical_operators() {
         Token::Identifier { name: String::from("a"), pos: 23 },
         Token::Operator { payload: String::from("="), pos: 24 },
         Token::Identifier { name: String::from("b"), pos: 25 },
+    );
+    let actual = TokenReader::new().parse(&source).unwrap();
+    assert_eq!(expected, actual)
+}
+
+/// Testing the correct finding of arithmetical operators
+#[test]
+fn test_logical_operators() {
+    let source = String::from("(A and B) or not (C and not D)");
+    let expected = vec!(
+        Token::Operator { payload: String::from("("), pos: 0 },
+        Token::Identifier { name: String::from("A"), pos: 1 },
+        Token::Operator { payload: String::from("and"), pos: 3 },
+        Token::Identifier { name: String::from("B"), pos: 7 },
+        Token::Operator { payload: String::from(")"), pos: 8 },
+        Token::Operator { payload: String::from("or"), pos: 10 },
+        Token::Operator { payload: String::from("not"), pos: 13 },
+        Token::Operator { payload: String::from("("), pos: 17 },
+        Token::Identifier { name: String::from("C"), pos: 18 },
+        Token::Operator { payload: String::from("and"), pos: 20 },
+        Token::Operator { payload: String::from("not"), pos: 24 },
+        Token::Identifier { name: String::from("D"), pos: 28 },
+        Token::Operator { payload: String::from(")"), pos: 29 },
     );
     let actual = TokenReader::new().parse(&source).unwrap();
     assert_eq!(expected, actual)
