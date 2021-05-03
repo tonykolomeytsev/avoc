@@ -672,7 +672,7 @@ fn test_block_comments() {
     let expected = vec!(
         Token::NewLine { pos: 47 },
         Token::Identifier { name: String::from("identifier1"), pos: 52 },
-        Token::Identifier { name: String::from("identifier2"), pos: 74 },
+        Token::Identifier { name: String::from("identifier2"), pos: 73 },
     );
     let actual = TokenReader::new().parse(&source).unwrap();
     assert_eq!(expected, actual)

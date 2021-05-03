@@ -1,0 +1,26 @@
+on:
+  push:
+    branches:
+      - master
+
+name: Rust CI
+
+jobs:
+  build:
+    name: Build Avo project
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+      - name: Run Release build
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --release --all-features
+      - name: Run Unit-tests
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args:
