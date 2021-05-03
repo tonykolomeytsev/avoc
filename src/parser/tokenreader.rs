@@ -297,6 +297,7 @@ fn reduce_state_identifier(symbol: char, state: State) -> Result<State, SyntaxEr
 
 #[inline]
 fn reduce_state_operator(symbol: char, prev_symbol: char, state: State) -> Result<State, SyntaxError> {
+    println!("Reduce operator: {}, {}", prev_symbol, symbol);
     let new_state = match prev_symbol {
         '+' | '-' | '*' | '/' | '=' | '!' | '<' | '>' => match symbol {
             '=' => state,
@@ -343,9 +344,9 @@ fn reduce_state_string_constant(symbol: char, state: State) -> Result<State, Syn
 
 #[inline]
 fn reduce_state_block_comment(symbol: char, prev_symbol: char, state: State) -> Result<State, SyntaxError> {
-    let new_state = match symbol {
-        '/' => match prev_symbol {
-            '*' => State { is_inside_block_comment: false, ..state },
+    let new_state = match prev_symbol {
+        '*' => match symbol {
+            '/' => State { is_inside_block_comment: false, ..state },
             _ => state,
         },
         _ => match state.is_inside_block_comment {
@@ -668,7 +669,7 @@ fn test_block_comments() {
     comment 1 
     this is comment 1
     */
-    identifier1 /*no-op*/ identifier2 /* comment 2 */ ");
+    identifier1 /*no-op*/identifier2 /* comment 2 *//* kek */");
     let expected = vec!(
         Token::NewLine { pos: 47 },
         Token::Identifier { name: String::from("identifier1"), pos: 52 },
