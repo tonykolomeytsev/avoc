@@ -124,7 +124,10 @@ impl TokenReader {
                 current_char = iter.next();
                 offset += 1;
             }
-            push_token_if_ready(&self.state, source, offset, &mut tokens);
+            match push_token_if_ready(&self.state, source, offset, &mut tokens) {
+                Ok(_) => { /* no-op */ }
+                Err(e) => return Err(e)
+            };
             match current_char {
                 Some(val) => {
                     match reduce_state(val, prev_char, offset - 1, self.state.get()) {
@@ -140,35 +143,47 @@ impl TokenReader {
             }
         }
         self.state.set(State { is_ready_to_push: true, ..self.state.get() });
-        push_token_if_ready(&self.state, source, offset, &mut tokens);
+        match push_token_if_ready(&self.state, source, offset, &mut tokens) {
+            Ok(_) => { /* no-op */ }
+            Err(e) => return Err(e)
+        };
         Ok(tokens)
     }
 }
 
-fn push_token_if_ready(state_cell: &Cell<State>, source: &String, offset: usize, tokens: &mut Vec<Token>) {
+fn push_token_if_ready(state_cell: &Cell<State>, source: &String, offset: usize, tokens: &mut Vec<Token>) -> Result<(), SyntaxError> {
     let state = state_cell.get();
     if state.is_ready_to_push {
         let start = state.start_offset;
         let end = offset - 1;
         let token_content = String::from(&source[start..end]);
-        match state.expected {
-            Expected::IntNumber => tokens.push(Token::IntConstant { value: token_content.parse().unwrap(), pos: start }),
+        let result = match state.expected {
+            Expected::IntNumber => match token_content.parse() {
+                Ok(int_value) => Ok(tokens.push(Token::IntConstant { value: int_value, pos: start })),
+                Err(_) => Err(SyntaxError { pos: start, message: format!("Can't parse int number {}", token_content) }),
+            },
             Expected::FloatNumber => match state.is_percent_float {
                 true => {
                     let token_content = String::from(&source[start..(end - 1)]);
-                    let float_value: f32 = token_content.parse().unwrap();
-                    tokens.push(Token::FloatConstant { value: float_value / 100.0, pos: start })
+                    match token_content.parse() {
+                        Ok(float_value) => Ok(tokens.push(Token::FloatConstant { value: get_percent_float(float_value), pos: start })),
+                        Err(_) => Err(SyntaxError { pos: start, message: format!("Can't parse percentage number {}%", token_content) }),
+                    }
+                    
                 }
-                false => tokens.push(Token::FloatConstant { value: token_content.parse().unwrap(), pos: start }),
+                false => match token_content.parse() {
+                    Ok(float_value) => Ok(tokens.push(Token::FloatConstant { value: float_value, pos: start })),
+                    Err(_) => Err(SyntaxError { pos: start, message: format!("Can't parse float number {}", token_content) }),
+                },
             },
             Expected::StringConstant => {
                 let token_content = String::from(&source[(start + 1)..(end - 1)]);
-                tokens.push(Token::StringConstant { value: token_content, pos: start })
+                Ok(tokens.push(Token::StringConstant { value: token_content, pos: start }))
             },
-            Expected::Identifier => tokens.push(get_keyword_or_identifier(token_content, start)),
-            Expected::Operator => tokens.push(Token::Operator { payload: token_content, pos: start }),
-            Expected::Newline => tokens.push(Token::NewLine { pos: start }),
-            Expected::Nothing => { /* no-op */ },
+            Expected::Identifier => Ok(tokens.push(get_keyword_or_identifier(token_content, start))),
+            Expected::Operator => Ok(tokens.push(Token::Operator { payload: token_content, pos: start })),
+            Expected::Newline => Ok(tokens.push(Token::NewLine { pos: start })),
+            Expected::Nothing => Ok(()),
         };
         state_cell.set(State { 
             is_ready_to_push: false, 
@@ -176,8 +191,14 @@ fn push_token_if_ready(state_cell: &Cell<State>, source: &String, offset: usize,
             is_percent_float: false,
             ..state
         });
+        result
+    } else {
+        Ok(())
     }
 }
+
+#[inline]
+fn get_percent_float(float_value: f32) -> f32 { float_value / 100.0 }
 
 #[inline]
 fn get_keyword_or_identifier(token_content: String, start: usize) -> Token {

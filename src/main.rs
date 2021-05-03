@@ -30,11 +30,11 @@ fn print_debug_info(file_name: &String, source: &String, offset: usize, message:
         let len = line.len();
         if sum + len >= offset {
             let column = offset - sum;
-            println!("Error in {}:{}:{}", file_name, line_num, column);
+            println!("Error in {}:{}:{}\n", file_name, line_num, column);
             println!("{}", line);
             print!("\u{001b}[31m\u{001b}[1m");
             println!("{:width$}^ {}", "", message, width=column);
-            print!("\u{001b}[0m");
+            println!("\u{001b}[0m");
             return
         }
         sum += len + 1;
