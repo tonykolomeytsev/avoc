@@ -297,7 +297,6 @@ fn reduce_state_identifier(symbol: char, state: State) -> Result<State, SyntaxEr
 
 #[inline]
 fn reduce_state_operator(symbol: char, prev_symbol: char, state: State) -> Result<State, SyntaxError> {
-    println!("Reduce operator: {}, {}", prev_symbol, symbol);
     let new_state = match prev_symbol {
         '+' | '-' | '*' | '/' | '=' | '!' | '<' | '>' => match symbol {
             '=' => state,
