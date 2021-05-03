@@ -35,6 +35,8 @@ struct State {
     start_offset: usize,
     is_ready_to_push: bool,
     is_prev_escape_symbol: bool,
+    // comments
+    is_inside_block_comment: bool,
     // strings
     is_inside_string: bool,
     // numbers
@@ -79,6 +81,8 @@ impl TokenReader {
                 expected: Expected::Nothing,
                 is_ready_to_push: false,
                 is_prev_escape_symbol: false,
+                //comments
+                is_inside_block_comment: false,
                 // strings
                 is_inside_string: false,
                 // numbers
@@ -302,7 +306,7 @@ fn reduce_state_operator(symbol: char, prev_symbol: char, state: State) -> Resul
                 _ => State { is_ready_to_push: true, ..state },
             },
             '*' => match prev_symbol {
-                '/' => State { expected: Expected::BlockComment, ..state },
+                '/' => State { expected: Expected::BlockComment, is_inside_block_comment: true, ..state },
                 _ => State { is_ready_to_push: true, ..state },
             },
             _ => State { is_ready_to_push: true, ..state },
@@ -341,10 +345,13 @@ fn reduce_state_string_constant(symbol: char, state: State) -> Result<State, Syn
 fn reduce_state_block_comment(symbol: char, prev_symbol: char, state: State) -> Result<State, SyntaxError> {
     let new_state = match symbol {
         '/' => match prev_symbol {
-            '*' => State { is_ready_to_push: true, ..state },
+            '*' => State { is_inside_block_comment: false, ..state },
             _ => state,
         },
-        _ => state,
+        _ => match state.is_inside_block_comment {
+            true => state,
+            false => State { is_ready_to_push: true, ..state },
+        },
     };
     Ok(new_state)
 }
@@ -635,9 +642,9 @@ fn test_other_operators() {
     assert_eq!(expected, actual)
 }
 
-/// Testing for ignoring line comments
+/// Testing for ignoring line comments.
 /// 
-/// Line comments come after `//` operator
+/// Line comments starts with `//` operator.
 #[test]
 fn test_line_comments() {
     let source = String::from("// comment 1
@@ -647,6 +654,25 @@ fn test_line_comments() {
         Token::NewLine { pos: 12 },
         Token::Identifier { name: String::from("identifier"), pos: 17 },
         Token::NewLine { pos: 40 },
+    );
+    let actual = TokenReader::new().parse(&source).unwrap();
+    assert_eq!(expected, actual)
+}
+
+/// Testing for ignoring block comments.
+/// 
+/// Block comment starts with `/*` and ends with `*/`.
+#[test]
+fn test_block_comments() {
+    let source = String::from("/* 
+    comment 1 
+    this is comment 1
+    */
+    identifier1 /*no-op*/ identifier2 /* comment 2 */ ");
+    let expected = vec!(
+        Token::NewLine { pos: 47 },
+        Token::Identifier { name: String::from("identifier1"), pos: 52 },
+        Token::Identifier { name: String::from("identifier2"), pos: 74 },
     );
     let actual = TokenReader::new().parse(&source).unwrap();
     assert_eq!(expected, actual)
