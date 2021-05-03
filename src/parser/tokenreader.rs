@@ -1,15 +1,18 @@
 use crate::dto::Token;
 use std::cell::Cell;
 
-const OPERATORS: &'static &str = &"=+-*/^\\().,<>:";
+const OPERATORS: &'static &str = &"{}=+-*/^\\().,<>:@";
 const KEYWORDS: &'static [&'static str] = &[
+    // flow
     "if", 
     "else",
-    "while",
+    "loop",
     "for",
     "in",
     "match",
+    // variables
     "mut",
+    // logical and bits
     "and",
     "or",
     "xor",
@@ -162,20 +165,7 @@ fn push_token_if_ready(state_cell: &Cell<State>, source: &String, offset: usize,
                 Ok(int_value) => Ok(tokens.push(Token::IntConstant { value: int_value, pos: start })),
                 Err(_) => Err(SyntaxError { pos: start, message: format!("Can't parse int number {}", token_content) }),
             },
-            Expected::FloatNumber => match state.is_percent_float {
-                true => {
-                    let token_content = String::from(&source[start..(end - 1)]);
-                    match token_content.parse() {
-                        Ok(float_value) => Ok(tokens.push(Token::FloatConstant { value: get_percent_float(float_value), pos: start })),
-                        Err(_) => Err(SyntaxError { pos: start, message: format!("Can't parse percentage number {}%", token_content) }),
-                    }
-                    
-                }
-                false => match token_content.parse() {
-                    Ok(float_value) => Ok(tokens.push(Token::FloatConstant { value: float_value, pos: start })),
-                    Err(_) => Err(SyntaxError { pos: start, message: format!("Can't parse float number {}", token_content) }),
-                },
-            },
+            Expected::FloatNumber => push_float_token_if_ready(&state, source, start, end, tokens, &token_content),
             Expected::StringConstant => {
                 let token_content = String::from(&source[(start + 1)..(end - 1)]);
                 Ok(tokens.push(Token::StringConstant { value: token_content, pos: start }))
@@ -194,6 +184,31 @@ fn push_token_if_ready(state_cell: &Cell<State>, source: &String, offset: usize,
         result
     } else {
         Ok(())
+    }
+}
+
+#[inline]
+fn push_float_token_if_ready(
+    state: &State, 
+    source: &String, 
+    start: usize, 
+    end: usize,
+    tokens: &mut Vec<Token>,
+    token_content: &String,
+) -> Result<(), SyntaxError> {
+    match state.is_percent_float {
+        true => {
+            let token_content = String::from(&source[start..(end - 1)]);
+            match token_content.parse() {
+                Ok(float_value) => Ok(tokens.push(Token::FloatConstant { value: get_percent_float(float_value), pos: start })),
+                Err(_) => Err(SyntaxError { pos: start, message: format!("Can't parse percentage number {}%", token_content) }),
+            }
+            
+        }
+        false => match token_content.parse() {
+            Ok(float_value) => Ok(tokens.push(Token::FloatConstant { value: float_value, pos: start })),
+            Err(_) => Err(SyntaxError { pos: start, message: format!("Can't parse float number {}", token_content) }),
+        },
     }
 }
 
@@ -232,7 +247,7 @@ fn reduce_state_nothing(symbol: char, offset: usize, state: State) -> Result<Sta
             Ok(State { expected: Expected::Operator, start_offset: offset, ..state }),
         '"' => Ok(State { expected: Expected::StringConstant, is_inside_string: true, start_offset: offset, ..state }),
         '_' => Err(SyntaxError { pos: offset, message: String::from("Identifier names must not start with an underscore") }),
-        _ => Err(SyntaxError { pos: offset, message: format!("Unexpected symbol {:?}", symbol) }),
+        _ => Err(SyntaxError { pos: offset, message: format!("Unexpected symbol '{}'", symbol) }),
     }
 }
 
@@ -275,6 +290,7 @@ fn reduce_state_operator(symbol: char, prev_symbol: char, state: State) -> Resul
     let new_state = match prev_symbol {
         '+' | '-' | '*' | '/' | '=' | '!' | '<' | '>' => match symbol {
             '=' => state,
+            '>' => State { is_ready_to_push: prev_symbol != '-', ..state },
             _ => State { is_ready_to_push: true, ..state },
         },
         _ => State { is_ready_to_push: true, ..state },
@@ -479,6 +495,107 @@ fn test_logical_operators() {
         Token::Operator { payload: String::from("not"), pos: 24 },
         Token::Identifier { name: String::from("D"), pos: 28 },
         Token::Operator { payload: String::from(")"), pos: 29 },
+    );
+    let actual = TokenReader::new().parse(&source).unwrap();
+    assert_eq!(expected, actual)
+}
+
+/// Testing the correct finding of flow operators
+/// 
+/// # Operators
+/// - `if`
+/// - `else`
+/// - `for`
+/// - `in`
+/// - `loop`
+/// - `{`, `}`
+/// - `->`
+#[test]
+fn test_flow_operators() {
+    // if happy path
+    let source = String::from("if a > b { foo() } else { bar() }");
+    let expected = vec!(
+        Token::Operator { payload: String::from("if"), pos: 0 },
+        Token::Identifier { name: String::from("a"), pos: 3 },
+        Token::Operator { payload: String::from(">"), pos: 5 },
+        Token::Identifier { name: String::from("b"), pos: 7 },
+        Token::Operator { payload: String::from("{"), pos: 9 },
+        Token::Identifier { name: String::from("foo"), pos: 11 },
+        Token::Operator { payload: String::from("("), pos: 14 },
+        Token::Operator { payload: String::from(")"), pos: 15 },
+        Token::Operator { payload: String::from("}"), pos: 17 },
+        Token::Operator { payload: String::from("else"), pos: 19 },
+        Token::Operator { payload: String::from("{"), pos: 24 },
+        Token::Identifier { name: String::from("bar"), pos: 26 },
+        Token::Operator { payload: String::from("("), pos: 29 },
+        Token::Operator { payload: String::from(")"), pos: 30 },
+        Token::Operator { payload: String::from("}"), pos: 32 },
+    );
+    let actual = TokenReader::new().parse(&source).unwrap();
+    assert_eq!(expected, actual);
+
+    // loop happy path
+    let source = String::from("loop { foo() }");
+    let expected = vec!(
+        Token::Operator { payload: String::from("loop"), pos: 0 },
+        Token::Operator { payload: String::from("{"), pos: 5 },
+        Token::Identifier { name: String::from("foo"), pos: 7 },
+        Token::Operator { payload: String::from("("), pos: 10 },
+        Token::Operator { payload: String::from(")"), pos: 11 },
+        Token::Operator { payload: String::from("}"), pos: 13 },
+    );
+    let actual = TokenReader::new().parse(&source).unwrap();
+    assert_eq!(expected, actual);
+
+    // loop happy path
+    let source = String::from("for i in range");
+    let expected = vec!(
+        Token::Operator { payload: String::from("for"), pos: 0 },
+        Token::Identifier { name: String::from("i"), pos: 4 },
+        Token::Operator { payload: String::from("in"), pos: 6 },
+        Token::Identifier { name: String::from("range"), pos: 9 },
+    );
+    let actual = TokenReader::new().parse(&source).unwrap();
+    assert_eq!(expected, actual);
+
+    // loop happy path
+    let source = String::from("match expr { a -> None }");
+    let expected = vec!(
+        Token::Operator { payload: String::from("match"), pos: 0 },
+        Token::Identifier { name: String::from("expr"), pos: 6 },
+        Token::Operator { payload: String::from("{"), pos: 11 },
+        Token::Identifier { name: String::from("a"), pos: 13 },
+        Token::Operator { payload: String::from("->"), pos: 15 },
+        Token::Identifier { name: String::from("None"), pos: 18 },
+        Token::Operator { payload: String::from("}"), pos: 23 },
+    );
+    let actual = TokenReader::new().parse(&source).unwrap();
+    assert_eq!(expected, actual)
+}
+
+/// Testing for correct finding of other operators
+/// 
+/// # Operators
+/// - `{`, `}`
+/// - `@`, `->`
+/// - `:`
+/// - `,`
+#[test]
+fn test_other_operators() {
+    let source = String::from("{ @ x, y -> x:0.1:y }");
+    let expected = vec!(
+        Token::Operator { payload: String::from("{"), pos: 0 },
+        Token::Operator { payload: String::from("@"), pos: 2 },
+        Token::Identifier { name: String::from("x"), pos: 4 },
+        Token::Operator { payload: String::from(","), pos: 5 },
+        Token::Identifier { name: String::from("y"), pos: 7 },
+        Token::Operator { payload: String::from("->"), pos: 9 },
+        Token::Identifier { name: String::from("x"), pos: 12 },
+        Token::Operator { payload: String::from(":"), pos: 13 },
+        Token::FloatConstant { value: 0.1, pos: 14 },
+        Token::Operator { payload: String::from(":"), pos: 17 },
+        Token::Identifier { name: String::from("y"), pos: 18 },
+        Token::Operator { payload: String::from("}"), pos: 20 },
     );
     let actual = TokenReader::new().parse(&source).unwrap();
     assert_eq!(expected, actual)
