@@ -1,32 +1,35 @@
-use crate::dto::Node;
-use crate::dto::Token;
+use crate::dto::{ Node, Token };
+use std::cell::Cell;
 
 #[derive(Debug)]
 pub struct TreeBuilder {
-    state: State,
+    state: Cell<State>,
 }
 
 #[derive(Copy, Clone, Debug)]
 struct State {
-    expected: Expected,
+    reading: Reading,
 }
 
 #[derive(Copy, Clone, Debug)]
-enum Expected {
+enum Reading {
     Nothing,
 }
 
+#[derive(Debug)]
+pub struct SyntaxError { pub pos: usize, pub message: String }
+
 impl TreeBuilder {
 
-    fn new() -> TreeBuilder {
+    pub fn new() -> TreeBuilder {
         TreeBuilder {
-            state: State {
-                expected: Expected::Nothing,
-            }
+            state: Cell::from(State {
+                reading: Reading::Nothing,
+            })
         }
     }
 
-    fn parse(&self, tokens: &Vec<Token>) -> Node {
-        Node::SingleToken(Token::Identifier { name: String::from("kek"), pos: 0 })
+    pub fn build_tree(&self, _: &Vec<Token>) -> Result<Node, SyntaxError> {
+        todo!()
     }
 }

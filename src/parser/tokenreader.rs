@@ -1,4 +1,4 @@
-use crate::dto::Token;
+use crate::dto::{ Token, SyntaxError };
 use std::cell::Cell;
 
 const OPERATORS: &'static &str = &"{}=+-*/^\\().,<>:@";
@@ -35,6 +35,8 @@ struct State {
     start_offset: usize,
     is_ready_to_push: bool,
     is_prev_escape_symbol: bool,
+    // identifiers
+    identifier_is_function: bool,
     // comments
     is_inside_block_comment: bool,
     // strings
@@ -55,9 +57,6 @@ enum Expected {
     BlockComment,
     LineComment,
 }
-
-#[derive(Debug)]
-pub struct SyntaxError { pub pos: usize, pub message: String }
 
 impl TokenReader {
 
@@ -81,6 +80,8 @@ impl TokenReader {
                 expected: Expected::Nothing,
                 is_ready_to_push: false,
                 is_prev_escape_symbol: false,
+                // identifiers
+                identifier_is_function: false,
                 //comments
                 is_inside_block_comment: false,
                 // strings
@@ -176,7 +177,7 @@ fn push_token_if_ready(state_cell: &Cell<State>, source: &String, offset: usize,
                 let token_content = String::from(&source[(start + 1)..(end - 1)]);
                 Ok(tokens.push(Token::StringConstant { value: token_content, pos: start }))
             },
-            Expected::Identifier => Ok(tokens.push(get_keyword_or_identifier(token_content, start))),
+            Expected::Identifier => Ok(tokens.push(get_keyword_or_identifier(token_content, start, state.identifier_is_function))),
             Expected::Operator => Ok(tokens.push(Token::Operator { payload: token_content, pos: start })),
             Expected::Newline => Ok(tokens.push(Token::NewLine { pos: start })),
             Expected::BlockComment => Ok(()),
@@ -224,10 +225,17 @@ fn push_float_token_if_ready(
 fn get_percent_float(float_value: f32) -> f32 { float_value / 100.0 }
 
 #[inline]
-fn get_keyword_or_identifier(token_content: String, start: usize) -> Token {
+fn get_keyword_or_identifier(
+    token_content: String, 
+    start: usize,
+    maybe_identifier_is_function: bool,
+) -> Token {
     match token_content {
         val if KEYWORDS.iter().any(|k| k.to_string() == val) => Token::Operator { payload: val, pos: start },
-        _ => Token::Identifier { name: token_content, pos: start }
+        _ => match maybe_identifier_is_function {
+            false => Token::Identifier { name: token_content, pos: start },
+            true => Token::Function { name: token_content, pos: start },
+        }
     }
 }
 
@@ -290,6 +298,7 @@ fn reduce_state_identifier(symbol: char, state: State) -> Result<State, SyntaxEr
     let new_state = match symbol {
         val if val.is_alphanumeric() => state,
         '_' => state,
+        '(' | '{' => State { is_ready_to_push: true, identifier_is_function: true, ..state },
         _ => State { is_ready_to_push: true, ..state },
     };
     Ok(new_state)
@@ -561,13 +570,13 @@ fn test_flow_operators() {
         Token::Operator { payload: String::from(">"), pos: 5 },
         Token::Identifier { name: String::from("b"), pos: 7 },
         Token::Operator { payload: String::from("{"), pos: 9 },
-        Token::Identifier { name: String::from("foo"), pos: 11 },
+        Token::Function { name: String::from("foo"), pos: 11 },
         Token::Operator { payload: String::from("("), pos: 14 },
         Token::Operator { payload: String::from(")"), pos: 15 },
         Token::Operator { payload: String::from("}"), pos: 17 },
         Token::Operator { payload: String::from("else"), pos: 19 },
         Token::Operator { payload: String::from("{"), pos: 24 },
-        Token::Identifier { name: String::from("bar"), pos: 26 },
+        Token::Function { name: String::from("bar"), pos: 26 },
         Token::Operator { payload: String::from("("), pos: 29 },
         Token::Operator { payload: String::from(")"), pos: 30 },
         Token::Operator { payload: String::from("}"), pos: 32 },
@@ -580,7 +589,7 @@ fn test_flow_operators() {
     let expected = vec!(
         Token::Operator { payload: String::from("loop"), pos: 0 },
         Token::Operator { payload: String::from("{"), pos: 5 },
-        Token::Identifier { name: String::from("foo"), pos: 7 },
+        Token::Function { name: String::from("foo"), pos: 7 },
         Token::Operator { payload: String::from("("), pos: 10 },
         Token::Operator { payload: String::from(")"), pos: 11 },
         Token::Operator { payload: String::from("}"), pos: 13 },
