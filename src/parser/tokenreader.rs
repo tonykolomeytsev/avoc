@@ -106,13 +106,13 @@ impl TokenReader {
     /// 
     /// ```
     /// let token_reader = TokenReader::new();
-    /// let tokens = token_reader.parse(String::from("2 + 2")).unwrap();
+    /// let tokens = token_reader.parse(String::from("2+2")).unwrap();
     /// 
     /// assert_eq!(
     ///     vec![
-    ///         Token { token_type: TokenType::Number, payload: "2", pos: 0 },
-    ///         Token { token_type: TokenType::Operator, payload: "+", pos: 1 },
-    ///         Token { token_type: TokenType::Number, payload: "2", pos: 2 },
+    ///         Token::IntConstant { value: 2, pos: 0 },
+    ///         Token::Operator { payload: String::from("+"), pos: 1 },
+    ///         Token::IntConstant { value: 2, pos: 2 },
     ///     ],
     ///     tokens,
     /// );
