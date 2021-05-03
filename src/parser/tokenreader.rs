@@ -50,6 +50,8 @@ enum Expected {
     Identifier,
     Operator,
     Newline,
+    BlockComment,
+    LineComment,
 }
 
 #[derive(Debug)]
@@ -173,6 +175,8 @@ fn push_token_if_ready(state_cell: &Cell<State>, source: &String, offset: usize,
             Expected::Identifier => Ok(tokens.push(get_keyword_or_identifier(token_content, start))),
             Expected::Operator => Ok(tokens.push(Token::Operator { payload: token_content, pos: start })),
             Expected::Newline => Ok(tokens.push(Token::NewLine { pos: start })),
+            Expected::BlockComment => Ok(()),
+            Expected::LineComment => Ok(()),
             Expected::Nothing => Ok(()),
         };
         state_cell.set(State { 
@@ -233,6 +237,8 @@ fn reduce_state(symbol: char, prev_symbol: char, offset: usize, state: State) ->
         Expected::Identifier => reduce_state_identifier(symbol, state),
         Expected::Operator => reduce_state_operator(symbol, prev_symbol, state),
         Expected::Newline => reduce_state_newline(symbol, state),
+        Expected::BlockComment => reduce_state_block_comment(symbol, prev_symbol, state),
+        Expected::LineComment => reduce_state_line_comment(symbol, state),
     }
 }
 
@@ -291,6 +297,14 @@ fn reduce_state_operator(symbol: char, prev_symbol: char, state: State) -> Resul
         '+' | '-' | '*' | '/' | '=' | '!' | '<' | '>' => match symbol {
             '=' => state,
             '>' => State { is_ready_to_push: prev_symbol != '-', ..state },
+            '/' => match prev_symbol {
+                '/' => State { expected: Expected::LineComment, ..state },
+                _ => State { is_ready_to_push: true, ..state },
+            },
+            '*' => match prev_symbol {
+                '/' => State { expected: Expected::BlockComment, ..state },
+                _ => State { is_ready_to_push: true, ..state },
+            },
             _ => State { is_ready_to_push: true, ..state },
         },
         _ => State { is_ready_to_push: true, ..state },
@@ -321,6 +335,26 @@ fn reduce_state_string_constant(symbol: char, state: State) -> Result<State, Syn
         true => State { is_prev_escape_symbol: false, ..state },
     };
     Ok(new_state)
+}
+
+#[inline]
+fn reduce_state_block_comment(symbol: char, prev_symbol: char, state: State) -> Result<State, SyntaxError> {
+    let new_state = match symbol {
+        '/' => match prev_symbol {
+            '*' => State { is_ready_to_push: true, ..state },
+            _ => state,
+        },
+        _ => state,
+    };
+    Ok(new_state)
+}
+
+#[inline]
+fn reduce_state_line_comment(symbol: char, state: State) -> Result<State, SyntaxError> {
+    match symbol {
+        '\n' => Ok(State { is_ready_to_push: true, ..state }),
+        _ => Ok(state),
+    }
 }
 
 /// Testing the correct finding of string literals.
@@ -596,6 +630,23 @@ fn test_other_operators() {
         Token::Operator { payload: String::from(":"), pos: 17 },
         Token::Identifier { name: String::from("y"), pos: 18 },
         Token::Operator { payload: String::from("}"), pos: 20 },
+    );
+    let actual = TokenReader::new().parse(&source).unwrap();
+    assert_eq!(expected, actual)
+}
+
+/// Testing for ignoring line comments
+/// 
+/// Line comments come after `//` operator
+#[test]
+fn test_line_comments() {
+    let source = String::from("// comment 1
+    identifier // comment 2
+    // comment 3");
+    let expected = vec!(
+        Token::NewLine { pos: 12 },
+        Token::Identifier { name: String::from("identifier"), pos: 17 },
+        Token::NewLine { pos: 40 },
     );
     let actual = TokenReader::new().parse(&source).unwrap();
     assert_eq!(expected, actual)
