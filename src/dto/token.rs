@@ -1,5 +1,5 @@
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Token {
     Operator { payload: String, pos: usize },
     Identifier { name: String, pos: usize },

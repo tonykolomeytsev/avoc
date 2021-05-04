@@ -1,7 +1,7 @@
 
 use crate::dto::Token;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct Node {
     pub data: Option<Token>,
     pub node_type: NodeType,
@@ -9,7 +9,7 @@ pub struct Node {
     pub children: Vec<Node>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum NodeType {
     Token,
     // Expression,
@@ -23,6 +23,15 @@ pub enum NodeType {
 }
 
 impl Node {
+
+    pub fn from(token: Token) -> Node {
+        Node {
+            data: Some(token),
+            node_type: NodeType::Token,
+            condition: vec!(),
+            children: vec!(),
+        }
+    }
     
     fn add_condition_child(&mut self, condition_child: Node) {
         self.condition.push(condition_child)
